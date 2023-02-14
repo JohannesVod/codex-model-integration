@@ -29,6 +29,7 @@ class SidebarProvider {
         };
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+       
 
         webviewView.webview.onDidReceiveMessage(async (data) => {
         switch (data.type) {
@@ -47,8 +48,9 @@ class SidebarProvider {
             break;
             }
             case "command": {
+                
                 if (!data.command) {
-                  return;
+                    return;
                 }
                 vscode.commands.executeCommand(data.command);
                 break;
