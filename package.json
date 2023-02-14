@@ -10,13 +10,34 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:codex-model-integration.helloWorld"
+    "onCommand:codex-model-integration.runCodex",
+    "onView:vsCodex-sidebar"
   ],
   "main": "./extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vsCodex-sidebar-view",
+          "title": "VSCodex",
+          "icon": "media/robot.svg"
+        }
+      ]
+    },
+    "views": {
+      "vsCodex-sidebar-view": [
+        {
+          "type": "webview",
+          "id": "vsCodex-sidebar",
+          "name": "VSCodex",
+          "icon": "media/heart.svg",
+          "contextualTitle": "VSCodex"
+        }
+      ]
+    },
     "commands": [{
-      "command": "codex-model-integration.helloWorld",
-      "title": "Hello World"
+      "command": "codex-model-integration.runCodex",
+      "title": "Run Codex model"
     }]
   },
   "scripts": {
