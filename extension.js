@@ -6,12 +6,198 @@ const vscode = require('vscode');
 // Your extension is activated the very first time the command is executed
 const SidebarProvider = require('./Sidebar/SidebarProvider').SidebarProvider;
 const { Configuration, OpenAIApi } = require("openai");
+const axios = require("axios");
+const { visitParameterList, convertToObject } = require('typescript');
+const fs = require("fs");
+const path = require('path');
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 
 let is_running = false;
+let sidebarProvider = null;
+
+
+const GetFromPrompt = async (prompt, callback) => {
+	try {
+	const configuration = new Configuration({
+	apiKey: process.env.OPENAI_API_KEY, 
+	});
+	let maxTokens = parseInt(sidebarProvider.maxTokens, 10);
+	const openai = new OpenAIApi(configuration);
+    const completion = await openai.createCompletion(
+        {
+			model: "code-davinci-002",
+			prompt: prompt,
+			temperature: sidebarProvider.temperature/100,
+			max_tokens: maxTokens,
+			top_p: 1.0,
+			frequency_penalty: 0.0,
+			presence_penalty: 0.0,
+			stream: true,
+			stop: ["\"\"\"", '"answer end"', '"Testfunction end"']
+        },
+        { responseType: "stream" }
+    );
+    return new Promise((resolve) => {
+        let result = "";
+        completion.data.on("data", (data) => {
+            const lines = data.toString()
+                .split("\n")
+                .filter((line) => line.trim() !== "");
+            for (const line of lines) {
+                const message = line.replace(/^data: /, "");
+                if (message == "[DONE]") {
+                    resolve(result);
+                } else {
+                    let token;
+                    try {
+                        token = JSON.parse(message).choices[0].text;
+                    } catch (err){
+                        console.log("ERROR");
+                    }
+                    result += token;
+                    if (token) {
+                        callback(token);
+                    }
+                }
+            }
+        });
+    });
+	} catch (error) {
+		if (error.response.status == 401){
+			vscode.window.showInformationMessage("Could not connect to openai(error 401)! Please make sure you have set your api-key from openai correctly in your environment variables! You can get your api-key here: https://openai.com/api/");
+		}
+		else if (error.response.status == 400){
+			vscode.window.showInformationMessage("Could not connect to openai(error 400)! Maybe try to lower max tokens");
+		}
+		else 
+		{
+			vscode.window.showInformationMessage(`Could not connect to openai(error${error.response.status}) ! Reason: unknown. Maybe try again later:(`);
+		}
+		console.log(error);
+	}
+};
+
+function buildPromptWriteTestFunction(textsofar){
+	let filePath = path.join(__dirname, './prompts/TestFunction.txt');
+	let text = fs.readFileSync(filePath, "utf8");
+
+	return text + textsofar + '\n\n"Testfunction":\n' 
+}
+
+function buildPromptChatbot(scrapedList, input){
+	let filePath = path.join(__dirname, './prompts/Chatbot.txt');
+	if (!sidebarProvider.is_scraping){
+		filePath = path.join(__dirname, './prompts/ChatbotNoScrape.txt');
+	}
+	
+	let text = fs.readFileSync(filePath, "utf8");
+	if (sidebarProvider.is_scraping){
+		text += '\n"Stack Overflow (ignore if irrelevant)":';
+		for (let item of scrapedList){
+			text += item + "\n";
+		}
+		text += '"Stack Overflow End"\n\n';
+	}
+	return text + "\n" + input + '\n\n"answer":';
+}
+
+function buildPromptWriteContinue(input){
+	return input;
+}
+
+async function GetFromPrompt2(prompt){
+	const configuration = new Configuration({
+	apiKey: process.env.OPENAI_API_KEY, 
+	});
+	const openai = new OpenAIApi(configuration);
+	let result = "";
+	// call the function with a keyword string
+	await openai.createCompletion({
+		model: "code-davinci-002",
+		prompt: prompt,
+		temperature: sidebarProvider.temperature/100,
+		max_tokens: sidebarProvider.max_tokens,
+		top_p: 1.0,
+		frequency_penalty: 0.0,
+		presence_penalty: 0.0,
+		stream: true,
+		stop: ["\"\"\"", '"answer end"', '"Testfunction end"'],
+		}).then((res) => {
+			// after getting the result;
+			result = res.data.choices[0].text;
+	});
+	
+	return result;
+}
+
+
+async function buildPromptTags(input){
+	let result = null;
+	await vscode.window.withProgress({
+		location: vscode.ProgressLocation.Notification,
+		title: "Generating search tags...",
+		cancellable: true
+	}, async (progress, token) => 
+	{
+		let filePath = path.join(__dirname, './prompts/GetTags.txt');
+
+		let text = fs.readFileSync(filePath, "utf8");
+		let prompt = text + input + "\n\n + <tags start>: ";
+		const configuration = new Configuration({
+			apiKey: process.env.OPENAI_API_KEY, 
+		});
+		const openai = new OpenAIApi(configuration);
+		
+		try{
+		// call the function with a keyword string
+		await openai.createCompletion({
+			model: "code-cushman-001",
+			prompt: prompt,
+			temperature: sidebarProvider.temperature/100,
+			max_tokens: 128,
+			top_p: 1.0,
+			frequency_penalty: 0.0,
+			presence_penalty: 0.0,
+			stop: ["\"\"\"", "<tags end>"],
+			}).then(async (res) => 
+			{
+				// after getting the result;
+				result = res.data.choices[0].text;
+			})
+		} catch (error) {
+			console.log(error);
+		}
+	})
+	return result;
+}
+
+function GetCurrentText(){
+	const editor = vscode.window.activeTextEditor;
+	const selection = editor.selection;
+	let text = editor.document.getText(selection);
+
+	if (selection.isEmpty) {
+		let position = selection.active;
+		let range = new vscode.Range(0, 0, position.line, position.character);
+		text = editor.document.getText(range);
+	}
+	return text;
+}
+
+function WriteResult(result, workspaceEdit){
+	process.stdout.write(result);
+	const editor = vscode.window.activeTextEditor;
+	if (editor) {
+	  // Add an insert edit at the end of the selection
+	  workspaceEdit.insert(editor.document.uri, editor.selection.end, result);
+	  // Apply the workspace edit
+	  vscode.workspace.applyEdit(workspaceEdit);
+	}
+}
+
 
 function activate(context) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
@@ -20,61 +206,187 @@ function activate(context) {
 	// Now provide the implementation of the command with  registerCommand
 	// The commandId parameter must match the command field in package.json
 
-	let disposable2 = vscode.commands.registerCommand("extension.writeTestFunction", () => {
+	context.subscriptions.push(vscode.commands.registerCommand('extension.writeTestFunction', () => {
+		if (is_running){
+			vscode.window.showInformationMessage("Already running!");
+			return;
+		}
+		
+		is_running = true;
+		let text = "";
+		try {
+			text = GetCurrentText();
+		} catch (error) {
+			vscode.window.showInformationMessage("Please go to a file!");
+			return;
+		}
+		if (text.length <= 10){
+			vscode.window.showInformationMessage("Please select some text!");
+			is_running = false;
+			return;
+		}
+		vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: `Writing test function!`,
+			cancellable: true
+		}, async (progress, token) => 
+		{
+			let continue_writing = true;
+			token.onCancellationRequested(() => {
+				console.log('User canceled the progress.');
+				is_running = false;
+				continue_writing = false;
+			});
+			let prompt = buildPromptWriteTestFunction(text);
+			
+			// Create a workspace edit object
+			let workspaceEdit = new vscode.WorkspaceEdit();
+			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c, workspaceEdit);}});
+			is_running = false;
+		})
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand("extension.chatbotFunction", async () => {
+		if (is_running){
+			vscode.window.showInformationMessage("Already running!");
+			return;
+		}
+		
+		is_running = true;
+		let text = "";
+		try {
+			text = GetCurrentText();
+		} catch (error) {
+			vscode.window.showInformationMessage("Please go to a file!");
+			return;
+		}
+		if (text.length <= 10){
+			vscode.window.showInformationMessage("Please select some text!");
+			is_running = false;
+			return;
+		}
+		
+		let scraped = [];
+		let tags = "";
+
+		if (sidebarProvider.is_scraping){
+			tags = await buildPromptTags(text);
+			scraped = await scrapeStackOverflow(tags, 2, sidebarProvider.is_scraping);
+		}
+		vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: `Answering question ${tags}`,
+			cancellable: true
+		}, async (progress, token) => 
+		{
+			let continue_writing = true;
+			token.onCancellationRequested(() => {
+				console.log('User canceled the progress.');
+				is_running = false;
+				continue_writing = false;
+			});
+			let prompt = buildPromptChatbot(scraped, text);
+			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c);}});
+			is_running = false;
+		})
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand("extension.continueFunction", async () => {
 		if (is_running){
 			vscode.window.showInformationMessage("Already running!");
 			return;
 		}
 		is_running = true;
-		const configuration = new Configuration({
-		apiKey: process.env.OPENAI_API_KEY,
-		});
-		const openai = new OpenAIApi(configuration);
-
-		const response = openai.createCompletion({
-		model: "code-davinci-002",
-		prompt: "class Log:\n    def __init__(self, path):\n        dirname = os.path.dirname(path)\n        os.makedirs(dirname, exist_ok=True)\n        f = open(path, \"a+\")\n\n        # Check that the file is newline-terminated\n        size = os.path.getsize(path)\n        if size > 0:\n            f.seek(size - 1)\n            end = f.read(1)\n            if end != \"\\n\":\n                f.write(\"\\n\")\n        self.f = f\n        self.path = path\n\n    def log(self, event):\n        event[\"_event_id\"] = str(uuid.uuid4())\n        json.dump(event, self.f)\n        self.f.write(\"\\n\")\n\n    def state(self):\n        state = {\"complete\": set(), \"last\": None}\n        for line in open(self.path):\n            event = json.loads(line)\n            if event[\"type\"] == \"submit\" and event[\"success\"]:\n                state[\"complete\"].add(event[\"id\"])\n                state[\"last\"] = event\n        return state\n\n\"\"\"\nHere's what the above class is doing:\n1.",
-		temperature: 0,
-		max_tokens: 64,
-		top_p: 1.0,
-		frequency_penalty: 0.0,
-		presence_penalty: 0.0,
-		stop: ["\"\"\""],
-		}).then((res) => {console.log(res.data.choices[0].text); is_running = false;});		
-	});
-
-	let disposable3 = vscode.commands.registerCommand("extension.chatbotFunction", async () => {
-		if (is_running){
-			vscode.window.showInformationMessage("Already running!");
+		let text = "";
+		try {
+			text = GetCurrentText();
+		} catch (error) {
+			vscode.window.showInformationMessage("Please go to a file!");
 			return;
 		}
-		is_running = true;
-		vscode.window.showInformationMessage("Chatbot command executed");
-		is_running = false;
-	});
-
-	let disposable4 = vscode.commands.registerCommand("extension.continueFunction", async () => {
-		if (is_running){
-			vscode.window.showInformationMessage("Already running!");
+		if (text.length <= 10){
+			vscode.window.showInformationMessage("Please select some text!");
+			is_running = false;
 			return;
 		}
-		is_running = true;
-		vscode.window.showInformationMessage("Coninue Function command executed");
-		is_running = false;
-	});
+		vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: `Continue text!`,
+			cancellable: true
+		}, async (progress, token) => 
+		{
+			let continue_writing = true;
+			token.onCancellationRequested(() => {
+				console.log('User canceled the progress.');
+				is_running = false;
+				continue_writing = false;
+			});
+			let prompt = buildPromptWriteContinue(text);
+			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c);}});
+			is_running = false;
+		})
+	}));
 
-	const sidebarProvider = new SidebarProvider(context.extensionUri);
+	sidebarProvider = new SidebarProvider(context.extensionUri, context);
 	context.subscriptions.push(
 	  vscode.window.registerWebviewViewProvider(
 		"vsCodex-sidebar",
 		sidebarProvider
 	  )
 	);
-
-	context.subscriptions.push(disposable2);
-	context.subscriptions.push(disposable3);
-	context.subscriptions.push(disposable4);
 }
+
+// define a function that takes a keyword string s as a parameter
+async function scrapeStackOverflow(s, max_sites=2, is_scraping=true, max_ans_length=300) {
+	if (!is_scraping){
+		return [""];
+	}
+	// construct the API URL with the keyword and some filters
+	// add filter=withbody to get the answers
+	const url = `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=${s}&site=stackoverflow&filter=%21T%2ahPNRA69ofM1izkPP`;
+	
+	var questions = [];
+	
+	// make a GET request to the API and handle the response
+	try {
+		// use await to wait for the response
+		const response = await axios.get(url);
+		// get the items array from the response data
+		const items = response.data.items;
+		let c = 0;
+	  	// loop through the items and get the question and answer
+		for (let item of items) {
+			if (c >= max_sites){
+				break;
+			}
+			let max_score = -1;
+			let max_answer = null;
+			for (let answer of item.answers){
+				if (max_score < answer.score){
+					max_score = answer.score;
+					max_answer = answer;
+				}
+			}
+			if (max_answer != null){
+				// create an object with the question and answer
+				// add it to the questions array
+				let answer = max_answer.body;
+				if (answer.length > max_ans_length){
+					answer = answer.substring(0, max_ans_length);
+				}
+				questions.push(`\ntitle: ${item.title}\n\nlink: ${item.link}\n\n solution:${answer}\n`);
+				c ++;
+			}
+		}
+		// return the questions array
+		return questions;
+	} catch (error) {
+	  	// handle any errors
+	  	console.log("Error when scraping: " + error);
+		return [""];
+	}
+}
+  
 
 // This method is called when your extension is deactivated
 function deactivate() {}

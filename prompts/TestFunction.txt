@@ -1,0 +1,99 @@
+
+Input: 
+
+class Deque:
+    def __init__(self, size) -> None:
+        self.A = [None]*size
+        self.start = 0 
+        self.end = 1
+        self.size = size
+    
+    def pushFront(self, elem):
+        if self.IsFull():
+            raise RuntimeError("Deque is full")
+        self.A[self.start] = elem
+        self.start = (self.start - 1)%self.size
+        
+    def pushBack(self, elem):
+        if self.IsFull():
+            raise RuntimeError("Deque is full")
+        self.A[self.end] = elem 
+        self.end = (self.end + 1)%self.size
+
+    def popFront(self):
+        if self.IsEmpty():
+            raise RuntimeError("Pop from empty Deque")
+        self.start = (self.start + 1)%self.size
+        elem = self.A[self.start]
+        return elem
+    
+    def popBack(self):
+        if self.IsEmpty():
+            raise RuntimeError("Pop from empty Deque")
+        self.end = (self.end - 1)%self.size
+        elem = self.A[self.end]
+        return elem
+
+    def IsEmpty(self):
+        return self.start%self.size == self.end%self.size+1
+
+    def IsFull(self):
+        return self.start%self.size == self.end%self.size
+
+    def __repr__(self):
+        return str([i for i in self])
+    
+    def __iter__(self):
+        self.current = self.start
+        return self
+
+    def __next__(self):
+        self.current += 1 
+        self.current %= self.size
+        if self.current == self.end:
+            raise StopIteration
+        element = self.A[self.current]
+        return element
+
+"Testfunction":
+
+import random
+
+def test_Deque():
+    size = 10
+    d = Deque(size)
+
+    # Push random elements to the front and back of the deque
+    for i in range(20):
+        if random.random() < 0.5:
+            elem = random.randint(1, 100)
+            try:
+                d.pushFront(elem)
+            except RuntimeError:
+                pass
+        else:
+            elem = random.randint(1, 100)
+            try:
+                d.pushBack(elem)
+            except RuntimeError:
+                pass
+
+    # Pop random elements from the front and back of the deque
+    for i in range(10):
+        if random.random() < 0.5:
+            try:
+                d.popFront()
+            except RuntimeError:
+                pass
+        else:
+            try:
+                d.popBack()
+            except RuntimeError:
+                pass
+
+    # Check that the deque is not empty and not full
+    assert not d.IsEmpty()
+    assert not d.IsFull()
+"Testfunction end"
+
+Input:

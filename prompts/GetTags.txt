@@ -1,0 +1,25 @@
+Input:
+
+l = [(4, "Haus"), (10, "Banane"), (3, "Apfel"), (2, "Meise"), (1, "Kuchen")]
+
+# How can i sort this list by the first element of the tuples: [(1, "Kuchen"), (2, "Meise"), (3, "Apfel"), (4, "Haus"), (10, "Banane")]
+
+<tags start>: python how to sort list of tuples by first element<tags end>
+
+Input: 
+
+async function printFiles () {
+  const files = await getFilePaths() // Assume this works fine
+
+  files.forEach(async (file) => {
+    const contents = await fs.readFile(file, 'utf8')
+    console.log(contents)
+  })
+}
+
+# Here i am using await in an async function for loop. I am not sure if this is correct. Could something go wrong with this?
+
+<tags start>: Can i use async/await in forEach loop javascript<tags end>
+
+Input: 
+

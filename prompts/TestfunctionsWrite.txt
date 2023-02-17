@@ -1,0 +1,37 @@
+
+Code:
+
+def factorial(n):
+    fact = 1
+    for num in range(2, n + 1):
+        fact = n * num
+    return fact
+
+Erklärung:Dieser Code definiert eine Funktion namens "factorial", die ein Argument "n" erwartet. Die Funktion berechnet das Fakultät von "n" (n!).
+Zu Beginn der Funktion wird eine Variable namens "fact" definiert und auf den Wert 1 gesetzt. In der folgenden Schleife wird dann "fact" mit jeder Zahl von 2 bis "n" multipliziert. Am Ende wird das Ergebnis zurückgegeben.
+
+Code: 
+
+def __init__(self, size) -> None:
+    self.A = [None]*size
+    self.start = 0 
+    self.end = 1
+    self.size = size
+
+def pushFront(self, elem):
+    if self.IsFull():
+        raise RuntimeError("Deque is full")
+    self.A[self.start] = elem
+    self.start = (self.start - 1)%self.size
+    
+def pushBack(self, elem):
+    if self.IsFull():
+        raise RuntimeError("Deque is full")
+    self.A[self.end] = elem 
+    self.end = (self.end + 1)%self.size
+
+def popFront(self):
+    if self.IsEmpty():
+
+Erklärung:Dieser Code definiert eine Klasse namens "Deque" (Double-ended Queue) mit den Methoden "pushFront", "pushBack" und "popFront". 
+Eine Deque ist eine Datenstruktur, die Elemente an beiden Enden hinzufügen und entfernen kann.
