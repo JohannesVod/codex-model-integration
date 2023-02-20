@@ -10,6 +10,8 @@ const axios = require("axios");
 const { visitParameterList, convertToObject } = require('typescript');
 const fs = require("fs");
 const path = require('path');
+const { resolveCliArgsFromVSCodeExecutablePath } = require('@vscode/test-electron');
+const { cursorTo } = require('readline');
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -22,7 +24,7 @@ let sidebarProvider = null;
 const GetFromPrompt = async (prompt, callback) => {
 	try {
 	const configuration = new Configuration({
-	apiKey: process.env.OPENAI_API_KEY, 
+	apiKey: process.env.OPENAI_API_KEY,
 	});
 	let maxTokens = parseInt(sidebarProvider.maxTokens, 10);
 	const openai = new OpenAIApi(configuration);
@@ -81,10 +83,10 @@ const GetFromPrompt = async (prompt, callback) => {
 };
 
 function buildPromptWriteTestFunction(textsofar){
-	let filePath = path.join(__dirname, './prompts/TestFunction.txt');
+	let filePath = path.join(__dirname, './prompts/CustomPreprompt.txt');
 	let text = fs.readFileSync(filePath, "utf8");
 
-	return text + textsofar + '\n\n"Testfunction":\n' 
+	return text.replace("{<HERE INPUT IS PUT. DO NOT REMOVE>}", textsofar);
 }
 
 function buildPromptChatbot(scrapedList, input){
@@ -95,44 +97,18 @@ function buildPromptChatbot(scrapedList, input){
 	
 	let text = fs.readFileSync(filePath, "utf8");
 	if (sidebarProvider.is_scraping){
-		text += '\n"Stack Overflow (ignore if irrelevant)":';
+		let scraped_text = "";
 		for (let item of scrapedList){
-			text += item + "\n";
+			scraped_text += item + "\n";
 		}
-		text += '"Stack Overflow End"\n\n';
+		text = text.replace("{<HERE SCRAPED IS PUT. DO NOT REMOVE>}", scraped_text);
 	}
-	return text + "\n" + input + '\n\n"answer":';
+	return text.replace("{<HERE INPUT IS PUT. DO NOT REMOVE>}", input);
 }
 
 function buildPromptWriteContinue(input){
 	return input;
 }
-
-async function GetFromPrompt2(prompt){
-	const configuration = new Configuration({
-	apiKey: process.env.OPENAI_API_KEY, 
-	});
-	const openai = new OpenAIApi(configuration);
-	let result = "";
-	// call the function with a keyword string
-	await openai.createCompletion({
-		model: "code-davinci-002",
-		prompt: prompt,
-		temperature: sidebarProvider.temperature/100,
-		max_tokens: sidebarProvider.max_tokens,
-		top_p: 1.0,
-		frequency_penalty: 0.0,
-		presence_penalty: 0.0,
-		stream: true,
-		stop: ["\"\"\"", '"answer end"', '"Testfunction end"'],
-		}).then((res) => {
-			// after getting the result;
-			result = res.data.choices[0].text;
-	});
-	
-	return result;
-}
-
 
 async function buildPromptTags(input){
 	let result = null;
@@ -145,7 +121,7 @@ async function buildPromptTags(input){
 		let filePath = path.join(__dirname, './prompts/GetTags.txt');
 
 		let text = fs.readFileSync(filePath, "utf8");
-		let prompt = text + input + "\n\n + <tags start>: ";
+		let prompt = text.replace("{<HERE INPUT IS PUT. DO NOT REMOVE>}", input);
 		const configuration = new Configuration({
 			apiKey: process.env.OPENAI_API_KEY, 
 		});
@@ -154,7 +130,7 @@ async function buildPromptTags(input){
 		try{
 		// call the function with a keyword string
 		await openai.createCompletion({
-			model: "code-cushman-001",
+			model: "code-davinci-001",
 			prompt: prompt,
 			temperature: sidebarProvider.temperature/100,
 			max_tokens: 128,
@@ -178,7 +154,7 @@ function GetCurrentText(){
 	const editor = vscode.window.activeTextEditor;
 	const selection = editor.selection;
 	let text = editor.document.getText(selection);
-
+	
 	if (selection.isEmpty) {
 		let position = selection.active;
 		let range = new vscode.Range(0, 0, position.line, position.character);
@@ -187,17 +163,41 @@ function GetCurrentText(){
 	return text;
 }
 
-function WriteResult(result, workspaceEdit){
-	process.stdout.write(result);
-	const editor = vscode.window.activeTextEditor;
-	if (editor) {
-	  // Add an insert edit at the end of the selection
-	  workspaceEdit.insert(editor.document.uri, editor.selection.end, result);
-	  // Apply the workspace edit
-	  vscode.workspace.applyEdit(workspaceEdit);
+
+
+var stored_edits = [];
+var is_editing = false;
+
+async function WriteResult(text){
+	text = text.replace("\r", "");
+	stored_edits.push(text);
+
+	if (is_editing == true){
+		return;
+	}
+	
+	while (stored_edits.length >= 1){
+		is_editing = true;
+		let result = stored_edits.shift();
+		const editor = vscode.window.activeTextEditor;
+		if (editor) {
+			let selection = editor.selection;
+			let editSucceeded = false;
+			let curr_tries = 0;
+			while (!editSucceeded && curr_tries < 100){
+				editSucceeded = await vscode.window.activeTextEditor.edit(editBuilder => {
+					let add_point = selection.active;
+					if (selection.end.isAfter(selection.active)){
+						add_point = selection.end;
+					}
+					editBuilder.insert(add_point, result);
+				}, { undoStopBefore: false, undoStopAfter: false });
+				curr_tries += 1;
+			}
+		}
+		is_editing = false;
 	}
 }
-
 
 function activate(context) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
@@ -218,6 +218,7 @@ function activate(context) {
 			text = GetCurrentText();
 		} catch (error) {
 			vscode.window.showInformationMessage("Please go to a file!");
+			is_running = false;
 			return;
 		}
 		if (text.length <= 10){
@@ -240,13 +241,13 @@ function activate(context) {
 			let prompt = buildPromptWriteTestFunction(text);
 			
 			// Create a workspace edit object
-			let workspaceEdit = new vscode.WorkspaceEdit();
-			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c, workspaceEdit);}});
+			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c);}});
 			is_running = false;
 		})
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand("extension.chatbotFunction", async () => {
+		try {
 		if (is_running){
 			vscode.window.showInformationMessage("Already running!");
 			return;
@@ -258,6 +259,7 @@ function activate(context) {
 			text = GetCurrentText();
 		} catch (error) {
 			vscode.window.showInformationMessage("Please go to a file!");
+			is_running = false;
 			return;
 		}
 		if (text.length <= 10){
@@ -271,7 +273,9 @@ function activate(context) {
 
 		if (sidebarProvider.is_scraping){
 			tags = await buildPromptTags(text);
-			scraped = await scrapeStackOverflow(tags, 2, sidebarProvider.is_scraping);
+			let scraped_tuple = await scrapeStackOverflow(tags, 2, sidebarProvider.is_scraping);
+			scraped = scraped_tuple[0];
+			sidebarProvider.SetScrapedSources(tags, scraped_tuple[1]);
 		}
 		vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
@@ -289,9 +293,13 @@ function activate(context) {
 			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c);}});
 			is_running = false;
 		})
+		} catch (error) {
+			console.log(error);		
+		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand("extension.continueFunction", async () => {
+		try{
 		if (is_running){
 			vscode.window.showInformationMessage("Already running!");
 			return;
@@ -302,6 +310,7 @@ function activate(context) {
 			text = GetCurrentText();
 		} catch (error) {
 			vscode.window.showInformationMessage("Please go to a file!");
+			is_running = false;
 			return;
 		}
 		if (text.length <= 10){
@@ -325,28 +334,69 @@ function activate(context) {
 			await GetFromPrompt(prompt, (c) => {if (continue_writing){WriteResult(c);}});
 			is_running = false;
 		})
+		} catch (error) {
+			console.log(error);		
+		}
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand("extension.scrapeFunction", async () => {
+		try{
+		if (is_running){
+			vscode.window.showInformationMessage("Already running!");
+			return;
+		}
+		is_running = true;
+		let text = "";
+		try {
+			text = GetCurrentText();
+		} catch (error) {
+			vscode.window.showInformationMessage("Please go to a file!");
+			is_running = false;
+			return;
+		}
+		if (text.length <= 10){
+			vscode.window.showInformationMessage("Please select some text!");
+			is_running = false;
+			return;
+		}
+		let tags = await buildPromptTags(text);
+		let links = await scrapeStackOverflow(tags, 0, true);
+		sidebarProvider.SetScrapedSources(tags, links[1]);
+		is_running = false;
+		} catch (error) {
+			console.log(error);		
+		}
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand("extension.editBtnFunction", async () => {
+		try{
+		let filePath = vscode.Uri.file(path.join(__dirname, "prompts/CustomPreprompt.txt"));
+		await vscode.commands.executeCommand("vscode.open", filePath);
+		} catch (error) {
+			vscode.window.showInformationMessage("Could not open file. Error:" + error.toString());
+		}
+	}));
+	
 	sidebarProvider = new SidebarProvider(context.extensionUri, context);
 	context.subscriptions.push(
-	  vscode.window.registerWebviewViewProvider(
-		"vsCodex-sidebar",
-		sidebarProvider
-	  )
+		vscode.window.registerWebviewViewProvider(
+			"vsCodex-sidebar",
+			sidebarProvider
+		)
 	);
 }
 
 // define a function that takes a keyword string s as a parameter
 async function scrapeStackOverflow(s, max_sites=2, is_scraping=true, max_ans_length=300) {
 	if (!is_scraping){
-		return [""];
+		return [[""], []];
 	}
 	// construct the API URL with the keyword and some filters
 	// add filter=withbody to get the answers
 	const url = `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=${s}&site=stackoverflow&filter=%21T%2ahPNRA69ofM1izkPP`;
-	
+
 	var questions = [];
-	
+	var foundlinks = [];
 	// make a GET request to the API and handle the response
 	try {
 		// use await to wait for the response
@@ -361,29 +411,39 @@ async function scrapeStackOverflow(s, max_sites=2, is_scraping=true, max_ans_len
 			}
 			let max_score = -1;
 			let max_answer = null;
-			for (let answer of item.answers){
-				if (max_score < answer.score){
-					max_score = answer.score;
-					max_answer = answer;
+			if (item.answers != null){
+				for (let answer of item.answers){
+					if (max_score < answer.score){
+						max_score = answer.score;
+						max_answer = answer;
+					}
 				}
-			}
-			if (max_answer != null){
-				// create an object with the question and answer
-				// add it to the questions array
-				let answer = max_answer.body;
-				if (answer.length > max_ans_length){
-					answer = answer.substring(0, max_ans_length);
+				if (max_answer != null){
+					// create an object with the question and answer
+					// add it to the questions array
+					let answer = max_answer.body;
+					if (answer.length > max_ans_length){
+						answer = answer.substring(0, max_ans_length);
+					}
+					questions.push(`\ntitle: ${item.title}\n\nlink: ${item.link}\n\n solution:${answer}\n`);
+					c ++;
 				}
-				questions.push(`\ntitle: ${item.title}\n\nlink: ${item.link}\n\n solution:${answer}\n`);
-				c ++;
 			}
 		}
-		// return the questions array
-		return questions;
+		c = 0;
+		for (let item of items) {
+			if (c >= 10){
+				break;
+			}
+			foundlinks.push([item.title, item.link]);
+			c += 1;
+		}
+		// return the questions/links array
+		return [questions, foundlinks];
 	} catch (error) {
 	  	// handle any errors
 	  	console.log("Error when scraping: " + error);
-		return [""];
+		return [[""], []];
 	}
 }
   

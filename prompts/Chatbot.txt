@@ -61,8 +61,15 @@ l = [(4, "Haus"), (10, "Banane"), (3, "Apfel"), (2, "Meise"), (1, "Kuchen")]
 # How can i sort this list by the first element of the tuples: [(1, "Kuchen"), (2, "Meise"), (3, "Apfel"), (4, "Haus"), (10, "Banane")]
 
 "answer":
-links: https://stackoverflow.com/questions/644170/how-does-python-sort-a-list-of-tuples
 Here you can just use the sort() function over the list. In your case you can call l.sort() (see https://stackoverflow.com/questions/644170/how-does-python-sort-a-list-of-tuples)
 "answer end"
 
 input:
+
+"Stack Overflow" (ignore if irrelevant):
+{<HERE SCRAPED IS PUT. DO NOT REMOVE>}
+"Stack Overflow End"
+
+{<HERE INPUT IS PUT. DO NOT REMOVE>}
+
+"answer":

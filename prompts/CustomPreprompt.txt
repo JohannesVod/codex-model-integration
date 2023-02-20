@@ -60,7 +60,7 @@ class Deque:
 import random
 
 def test_Deque():
-    size = 10
+    size = 20
     d = Deque(size)
 
     # Push random elements to the front and back of the deque
@@ -97,3 +97,7 @@ def test_Deque():
 "Testfunction end"
 
 Input:
+
+{<HERE INPUT IS PUT. DO NOT REMOVE>}
+
+"Testfunction":

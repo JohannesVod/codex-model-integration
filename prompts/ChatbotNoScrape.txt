@@ -43,3 +43,7 @@ Here you can just use the sort() function over the list: l.sort().
 "answer end"
 
 input:
+
+{<HERE INPUT IS PUT. DO NOT REMOVE>}
+
+"answer":
