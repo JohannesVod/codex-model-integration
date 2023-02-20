@@ -116,7 +116,7 @@ async function buildPromptTags(input){
 		location: vscode.ProgressLocation.Notification,
 		title: "Generating search tags...",
 		cancellable: true
-	}, async (progress, token) => 
+	}, async () => 
 	{
 		let filePath = path.join(__dirname, './prompts/GetTags.txt');
 
