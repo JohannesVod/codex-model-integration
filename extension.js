@@ -69,7 +69,7 @@ const GetFromPrompt = async (prompt, callback) => {
     });
 	} catch (error) {
 		if (error.response.status == 401){
-			vscode.window.showInformationMessage("Could not connect to openai(error 401)! Please make sure you have set your api-key from openai correctly in your environment variables! You can get your api-key here: https://openai.com/api/");
+			vscode.window.showInformationMessage("Could not connect to openai(error 401)! See https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety for more instructions");
 		}
 		else if (error.response.status == 400){
 			vscode.window.showInformationMessage("Could not connect to openai(error 400)! Maybe try to lower max tokens");
