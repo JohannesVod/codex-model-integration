@@ -56,7 +56,12 @@
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",
-    "test": "node ./test/runTest.js"
+    "test": "node ./test/runTest.js",
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "esbuild extension.js --bundle --outfile=out/main.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "test-compile": "tsc -p ./"
   },
   "devDependencies": {
     "@types/glob": "^8.0.1",
@@ -64,6 +69,7 @@
     "@types/node": "16.x",
     "@types/vscode": "^1.54.0",
     "@vscode/test-electron": "^2.2.2",
+    "esbuild": "^0.17.10",
     "eslint": "^8.33.0",
     "glob": "^8.1.0",
     "mocha": "^10.1.0",
