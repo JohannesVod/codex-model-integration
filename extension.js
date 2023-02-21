@@ -7,11 +7,8 @@ const vscode = require('vscode');
 const SidebarProvider = require('./Sidebar/SidebarProvider').SidebarProvider;
 const { Configuration, OpenAIApi } = require("openai");
 const axios = require("axios");
-const { visitParameterList, convertToObject } = require('typescript');
 const fs = require("fs");
 const path = require('path');
-const { resolveCliArgsFromVSCodeExecutablePath } = require('@vscode/test-electron');
-const { cursorTo } = require('readline');
 
 /**
  * @param {vscode.ExtensionContext} context

@@ -3,6 +3,7 @@
   "displayName": "Codex Model Integration",
   "publisher": "JohannesVoderholzer",
   "description": "An integration of the codex model by openai into VSCode",
+  "icon": "media/extensIcon.png",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.54.0"
@@ -74,6 +75,7 @@
     "install": "^0.13.0",
     "jquery": "^3.6.3",
     "node-fetch": "^3.3.0",
-    "openai": "^3.1.0"
+    "openai": "^3.1.0",
+    "path": "^0.12.7"
   }
 }
