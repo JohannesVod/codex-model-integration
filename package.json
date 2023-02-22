@@ -4,7 +4,7 @@
   "publisher": "JohannesVoderholzer",
   "description": "An integration of the codex model by openai into VSCode",
   "icon": "media/extensIcon.png",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.54.0"
   },

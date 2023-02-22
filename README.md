@@ -5,7 +5,9 @@ This extension implements a simple integration for the openai codex model. Pleas
 ## Features
 
 To generate text from codex, first select some text or place the cursor. Then click on the little robot icon on the left sidebar and click on the "chatbot" or "continue writing" button. The "chatbot" button uses a simple preprompt that allows for better question answering. The "continue writing" button will just call the raw model on the selected text. You can also define a custom preprompt.
-
+<p style="float:right;">
+  <img src="https://github.com/NiceGuySaysHi/codex-model-integration/blob/main/media/scraping%20example.png">
+</p>
 For example if there is an image subfolder under your extension project workspace:
 
 ![Alt text](media/demo.gif)
